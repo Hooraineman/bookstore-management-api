@@ -11,6 +11,24 @@ const app = express();
 app.use(express.json());
 app.use(logger);
 
+// Connect to MongoDB (cached across serverless invocations)
+let isConnected = false;
+async function connectDB() {
+  if (isConnected) return;
+  await mongoose.connect(process.env.MONGO_URI);
+  isConnected = true;
+  console.log('Connected to MongoDB');
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.use('/api/books', bookRoutes);
 
 // 404 handler
@@ -29,13 +47,13 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
+// Only listen locally — Vercel handles this itself via the export below
+if (require.main === module) {
+  connectDB().then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
   });
+}
+
+module.exports = app;
